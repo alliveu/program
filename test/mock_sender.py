@@ -12,8 +12,9 @@ def mock_sender():
         with serial.Serial(SENDER_PORT, BAUDRATE, timeout=1) as ser:
             print(f"[MOCK SENDER] Port open: {SENDER_PORT}")
             while True:
-                value = round(random.uniform(40.0, 80.0), 2)
-                msg = f"device001,{value}\n"
+                temperature = round(random.uniform(40.0, 80.0), 2)
+                pressure = round(random.uniform(0.9, 2.0), 3)  # 예시 압력 값
+                msg = f"device001,{temperature},{pressure}\n"
                 ser.write(msg.encode("utf-8"))
                 print(f"[MOCK SENDER] Sent: {msg.strip()}")
                 time.sleep(1)

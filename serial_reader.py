@@ -1,7 +1,7 @@
 import serial
 import time
-from config import RECEIVER_PORT, BAUDRATE, TEMP_THRESHOLD
-from database_handler import insert_temperature
+from config import RECEIVER_PORT, BAUDRATE
+from database_handler import insert_sensor_data
 
 def read_serial_forever():
     try:
@@ -12,10 +12,10 @@ def read_serial_forever():
                     line = ser.readline().decode("utf-8").strip()
                     if line:
                         print(f"[RECEIVER] Received: {line}")
-                        device_id, value_str = line.split(",")
-                        value = float(value_str)
-                        status = "danger" if value > TEMP_THRESHOLD else "normal"
-                        insert_temperature(device_id, value, status)
+                        device_id, temp_str, pres_str = line.split(",")
+                        temperature = float(temp_str)
+                        pressure = float(pres_str)
+                        insert_sensor_data(device_id, temperature, pressure)
                 except Exception as e:
                     print(f"[PARSING ERROR] {e}")
     except Exception as e:

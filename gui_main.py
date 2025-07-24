@@ -6,15 +6,12 @@ import serial
 from datetime import datetime
 from PyQt5 import QtWidgets, QtCore
 
-# 설정값 기본 경로
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.py")
 DB_PATH = "data.db"
 
-# 기본값 설정 (config.py에서 불러옴)
 SENDER_PORT = "COM10"
 RECEIVER_PORT = "COM11"
 BAUDRATE = 9600
-TEMP_THRESHOLD = 70.0
 
 receiver_thread = None
 stop_event = threading.Event()
@@ -31,27 +28,27 @@ def load_ports_from_config():
     except Exception as e:
         print(f"[CONFIG LOAD ERROR] {e}")
 
-def insert_temperature(device_id: str, value: float, status_flag: str):
+def insert_sensor_data(device_id: str, temperature: float, pressure: float):
     timestamp = datetime.utcnow().isoformat()
     try:
         with sqlite3.connect(DB_PATH, timeout=5.0) as conn:
             conn.execute("PRAGMA journal_mode=WAL;")
             c = conn.cursor()
             c.execute('''
-                INSERT INTO temperature_logs (timestamp, device_id, value, status_flag)
+                INSERT INTO sensor_logs (timestamp, device_id, temperature, pressure)
                 VALUES (?, ?, ?, ?)
-            ''', (timestamp, device_id, value, status_flag))
+            ''', (timestamp, device_id, temperature, pressure))
             conn.commit()
     except sqlite3.OperationalError as e:
-        print(f"[DB ERROR] {e} at {timestamp} | {device_id}, {value}, {status_flag}")
+        print(f"[DB ERROR] {e} at {timestamp} | {device_id}, {temperature}, {pressure}")
 
 def fetch_latest_logs(limit=10):
     try:
         with sqlite3.connect(DB_PATH, timeout=5.0) as conn:
             c = conn.cursor()
             c.execute('''
-                SELECT timestamp, device_id, value, status_flag
-                FROM temperature_logs
+                SELECT timestamp, device_id, temperature, pressure
+                FROM sensor_logs
                 ORDER BY id DESC
                 LIMIT ?
             ''', (limit,))
@@ -70,10 +67,10 @@ def receiver_loop():
                     line = ser.readline().decode("utf-8").strip()
                     if line:
                         print(f"[RECEIVER] Received: {line}")
-                        device_id, value_str = line.split(",")
-                        value = float(value_str)
-                        status = "danger" if value > TEMP_THRESHOLD else "normal"
-                        insert_temperature(device_id, value, status)
+                        device_id, temp_str, pres_str = line.split(",")
+                        temperature = float(temp_str)
+                        pressure = float(pres_str)
+                        insert_sensor_data(device_id, temperature, pressure)
                 except Exception as e:
                     print(f"[RECEIVER ERROR] {e}")
     except Exception as e:
@@ -82,10 +79,9 @@ def receiver_loop():
 class TemperatureMonitorApp(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Temperature Monitor GUI")
+        self.setWindowTitle("Sensor Monitor GUI")
         self.setGeometry(100, 100, 700, 400)
 
-        # UI 구성
         central_widget = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout()
 
@@ -103,7 +99,7 @@ class TemperatureMonitorApp(QtWidgets.QMainWindow):
 
         self.table = QtWidgets.QTableWidget()
         self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Timestamp", "Device ID", "Value", "Status"])
+        self.table.setHorizontalHeaderLabels(["Timestamp", "Device ID", "Temperature", "Pressure"])
         layout.addWidget(self.table)
 
         central_widget.setLayout(layout)
@@ -135,9 +131,9 @@ class TemperatureMonitorApp(QtWidgets.QMainWindow):
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 for line in lines:
                     if line.startswith("SENDER_PORT"):
-                        f.write(f'SENDER_PORT = "{sender}"  # mock_sender가 데이터를 보내는 포트\n')
+                        f.write(f'SENDER_PORT = "{sender}"  # mock_sender 포트\n')
                     elif line.startswith("RECEIVER_PORT"):
-                        f.write(f'RECEIVER_PORT = "{receiver}"  # serial_reader가 데이터를 수신하는 포트\n')
+                        f.write(f'RECEIVER_PORT = "{receiver}"  # 수신 포트\n')
                     else:
                         f.write(line)
 
@@ -155,8 +151,6 @@ class TemperatureMonitorApp(QtWidgets.QMainWindow):
         for row_idx, row in enumerate(data):
             for col_idx, value in enumerate(row):
                 item = QtWidgets.QTableWidgetItem(str(value))
-                if col_idx == 3 and value == "danger":
-                    item.setForeground(QtCore.Qt.red)
                 self.table.setItem(row_idx, col_idx, item)
 
     def start_receiver_thread(self):
